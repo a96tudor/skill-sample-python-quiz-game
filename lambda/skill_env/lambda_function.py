@@ -23,7 +23,7 @@ from ask_sdk_model.interfaces.display import (
     BackButtonBehavior, ListItem, BodyTemplate2, BodyTemplate1)
 from ask_sdk_model import ui, Response
 
-from alexa import data, util
+from alexa import data, util, utils, data_roboti
 
 
 # Skill Builder object
@@ -43,8 +43,8 @@ class LaunchRequestHandler(AbstractRequestHandler):
     def handle(self, handler_input):
         # type: (HandlerInput) -> Response
         logger.info("In LaunchRequestHandler")
-        handler_input.response_builder.speak(data.WELCOME_MESSAGE).ask(
-            data.HELP_MESSAGE)
+        handler_input.response_builder.speak(data_roboti.WELCOME_MESSAGE).ask(
+            data_roboti.HELP_MESSAGE)
         return handler_input.response_builder.response
 
 
@@ -75,7 +75,7 @@ class HelpIntentHandler(AbstractRequestHandler):
         # Resetting session
 
         handler_input.response_builder.speak(
-            data.HELP_MESSAGE).ask(data.HELP_MESSAGE)
+            data_roboti.HELP_MESSAGE).ask(data_roboti.HELP_MESSAGE)
         return handler_input.response_builder.response
 
 
@@ -91,7 +91,7 @@ class ExitIntentHandler(AbstractRequestHandler):
         # type: (HandlerInput) -> Response
         logger.info("In ExitIntentHandler")
         handler_input.response_builder.speak(
-            data.EXIT_SKILL_MESSAGE).set_should_end_session(True)
+            data_roboti.EXIT_MESSAGE).set_should_end_session(True)
         return handler_input.response_builder.response
 
 
@@ -112,50 +112,24 @@ class QuizHandler(AbstractRequestHandler):
     def handle(self, handler_input):
         # type: (HandlerInput) -> Response
         logger.info("In QuizHandler")
+
         attr = handler_input.attributes_manager.session_attributes
         attr["state"] = "QUIZ"
         attr["counter"] = 0
         attr["quiz_score"] = 0
 
-        question = util.ask_question(handler_input)
+        attr['questions'] = utils.get_questions_for_new_quiz()
+        question = utils.get_question_text(attr['questions'][0])
+        attr['last_question'] = attr['questions'][0]
+        attr['questions'] = attr['question'][1:]
+
+        handler_input.attributes_manager.session_attributes = attr
+
         response_builder = handler_input.response_builder
-        response_builder.speak(data.START_QUIZ_MESSAGE + question)
+        response_builder.speak(data_roboti.QUIZ_START_MESSAGE.format(
+            data_roboti.MAX_QUESTIONS, question
+        ))
         response_builder.ask(question)
-
-        if data.USE_CARDS_FLAG:
-            item = attr["quiz_item"]
-            response_builder.set_card(
-                ui.StandardCard(
-                    title="Question #1",
-                    text=data.START_QUIZ_MESSAGE + question,
-                    image=ui.Image(
-                        small_image_url=util.get_small_image(item),
-                        large_image_url=util.get_large_image(item)
-                    )))
-
-        if util.supports_display(handler_input):
-            item = attr["quiz_item"]
-            item_attr = attr["quiz_attr"]
-            title = "Question #{}".format(str(attr["counter"]))
-            background_img = Image(
-                sources=[ImageInstance(
-                    url=util.get_image(
-                        ht=1024, wd=600, label=item["abbreviation"]))])
-            item_list = []
-            for ans in util.get_multiple_choice_answers(
-                    item, item_attr, data.STATES_LIST):
-                item_list.append(ListItem(
-                    token=ans,
-                    text_content=get_plain_text_content(primary_text=ans)))
-
-            response_builder.add_directive(
-                RenderTemplateDirective(
-                    ListTemplate1(
-                        token="Question",
-                        back_button=BackButtonBehavior.HIDDEN,
-                        background_image=background_img,
-                        title=title,
-                        list_items=item_list)))
 
         return response_builder.response
 
@@ -178,42 +152,10 @@ class DefinitionHandler(AbstractRequestHandler):
     def handle(self, handler_input):
         # type: (HandlerInput) -> Response
         logger.info("In DefinitionHandler")
+
         response_builder = handler_input.response_builder
-        item, is_resolved = util.get_item(
-            slots=handler_input.request_envelope.request.intent.slots,
-            states_list=data.STATES_LIST)
-
-        if is_resolved:
-            if data.USE_CARDS_FLAG:
-                response_builder.set_card(
-                    ui.StandardCard(
-                        title=util.get_card_title(item),
-                        text=util.get_card_description(item),
-                        image=ui.Image(
-                            small_image_url=util.get_small_image(item),
-                            large_image_url=util.get_large_image(item)
-                        )))
-
-            if util.supports_display(handler_input):
-                img = Image(
-                    sources=[ImageInstance(url=util.get_large_image(item))])
-                title = util.get_card_title(item)
-                primary_text = get_plain_text_content(
-                    primary_text=util.get_card_description(item))
-
-                response_builder.add_directive(
-                    RenderTemplateDirective(
-                        BodyTemplate2(
-                            back_button=BackButtonBehavior.VISIBLE,
-                            image=img, title=title,
-                            text_content=primary_text)))
-
-            response_builder.speak(
-                util.get_speech_description(item)).ask(data.REPROMPT_SPEECH)
-
-        else:
-            response_builder.speak(
-                util.get_bad_answer(item)).ask(util.get_bad_answer(item))
+        fact = utils.get_random_true_fact()
+        response_builder.speak(fact).ask(fact)
 
         return response_builder.response
 
@@ -239,6 +181,7 @@ class QuizAnswerHandler(AbstractRequestHandler):
     def handle(self, handler_input):
         # type: (HandlerInput) -> Response
         logger.info("In QuizAnswerHandler")
+        # TODO: ADD HANDLER FOR ROBOTS
         attr = handler_input.attributes_manager.session_attributes
         response_builder = handler_input.response_builder
 
@@ -372,7 +315,9 @@ class RepeatHandler(AbstractRequestHandler):
                 cached_response_str, Response)
             return cached_response
         else:
-            response_builder.speak(data.FALLBACK_ANSWER).ask(data.HELP_MESSAGE)
+            response_builder.speak(data_roboti.FALLBACK_MESSAGE).ask(
+                data_roboti.HELP_MESSAGE,
+            )
 
             return response_builder.response
 
@@ -391,7 +336,7 @@ class FallbackIntentHandler(AbstractRequestHandler):
         # type: (HandlerInput) -> Response
         logger.info("In FallbackIntentHandler")
         handler_input.response_builder.speak(
-            data.FALLBACK_ANSWER).ask(data.HELP_MESSAGE)
+            data_roboti.FALLBACK_MESSAGE).ask(data_roboti.HELP_MESSAGE)
 
         return handler_input.response_builder.response
 
@@ -426,8 +371,8 @@ class CatchAllExceptionHandler(AbstractExceptionHandler):
         # type: (HandlerInput, Exception) -> Response
         logger.error(exception, exc_info=True)
 
-        speech = "Sorry, there was some problem. Please try again!!"
-        handler_input.response_builder.speak(speech).ask(speech)
+        handler_input.response_builder.speak(data_roboti.EXCEPTION_MESSAGE).ask(
+            data_roboti.EXCEPTION_MESSAGE)
 
         return handler_input.response_builder.response
 
